@@ -1,0 +1,6 @@
+.config_*
+*.o
+app
+*.so
+Enclave_u.*
+Enclave_t.*
