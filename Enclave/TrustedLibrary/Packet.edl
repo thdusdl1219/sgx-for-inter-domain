@@ -1,0 +1,7 @@
+enclave {
+
+  trusted {
+
+    public void ecall_count(uint16_t n);
+  };
+};
