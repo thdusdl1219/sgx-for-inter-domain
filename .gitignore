@@ -1,8 +1,10 @@
 .config_*
 *.o
 app
+l2fwd
 *.so
 Enclave_u.*
 Enclave_t.*
 *.swp
 *.swo
+build/*
