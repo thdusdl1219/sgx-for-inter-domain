@@ -217,9 +217,7 @@ App: App/Enclave_u.c all
 	@echo "COMPILE APP"
 
 App/Enclave_u.c: $(SGX_EDGER8R) Enclave/Enclave.edl
-	@echo $(SRCS-y)
-	@echo $(App_C_File)
-	@echo $(App_C_Files)
+	@echo "SOURCE CODE LIST : $(SRCS-y)"
 	@cd App && $(SGX_EDGER8R) --untrusted ../Enclave/Enclave.edl --search-path ../Enclave --search-path $(SGX_SDK)/include
 	@echo "GEN  =>  $@"
 
