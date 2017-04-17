@@ -250,7 +250,8 @@ $(Signed_Enclave_Name): $(Enclave_Name)
 sc: clean 
 	@rm -f .config_* $(APP_Name) build/$(Enclave_Name) build/$(Signed_Enclave_Name) $(App_C_Objects) App/Enclave_u.* $(Enclave_C_Objects) Enclave/Enclave_t.*
 
-
+run: soyeon
+	@sudo env LD_LIBRARY_PATH=$LD_LIBRARY_PATH ./build/l2fwd -- -p 3
 	
 
 

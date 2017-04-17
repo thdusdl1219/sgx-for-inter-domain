@@ -2,6 +2,6 @@ enclave {
 
   trusted {
 
-    public void ecall_count(uint16_t n);
+    public void ecall_count([in, size=n] char* buf, uint16_t n, uint16_t off);
   };
 };

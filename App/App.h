@@ -9,10 +9,8 @@
 extern "C" {
 #endif
 void ecall_libc_functions(void);
-void ecall_libcxx_functions(void);
-void ecall_thread_functions(void);
 
-void ecall_count_packets(const uint16_t n);
+void ecall_count_packets(char* buf_addr, const uint16_t n, uint16_t off);
 
 #if defined(__cplusplus)
 }
