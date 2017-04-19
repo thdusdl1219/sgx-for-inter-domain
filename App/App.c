@@ -41,6 +41,14 @@
 #include <rte_mempool.h>
 #include <rte_mbuf.h>
 
+//for ring
+#include <rte_ring.h>
+#define RING_NAME "RING1"
+#define RING_SIZE 64
+
+
+
+struct rte_ring *ring;
 
 /* OCall functions */
 void ocall_print_string(const char *str)
@@ -49,6 +57,24 @@ void ocall_print_string(const char *str)
      * the input string to prevent buffer overflow. 
      */
     printf("%s", str);
+}
+
+/**
+ * Get the last enabled lcore ID
+ *
+ * @return
+ *   The last enabled lcore_id.
+ */
+static unsigned int
+get_last_lcore_id(void)
+{
+    int i;
+
+    for (i = RTE_MAX_LCORE; i >= 0; i--)
+        if (rte_lcore_is_enabled(i))
+            return i;
+
+    return 0;
 }
 
 
@@ -198,7 +224,6 @@ l2fwd_simple_forward(struct rte_mbuf *m, unsigned portid)
 
 	buffer = tx_buffer[dst_port];
 
-  ecall_count_packets(rte_pktmbuf_mtod(m, char*), m->data_len, m->data_off);
 
 	sent = rte_eth_tx_buffer(dst_port, 0, buffer, m);
 	if (sent)
@@ -292,6 +317,8 @@ l2fwd_main_loop(void)
 			nb_rx = rte_eth_rx_burst((uint8_t) portid, 0,
 						 pkts_burst, MAX_PKT_BURST);
 
+      rte_ring_enqueue_bulk(ring, (void *)pkts_burst, nb_rx);
+
 			port_statistics[portid].rx += nb_rx;
 
 			for (j = 0; j < nb_rx; j++) {
@@ -308,6 +335,31 @@ l2fwd_launch_one_lcore(__attribute__((unused)) void *dummy)
 {
 	l2fwd_main_loop();
 	return 0;
+}
+
+static int
+my_func(__attribute__((unused)) void *dummy)
+{
+
+	unsigned lcore_id = rte_lcore_id();
+	struct rte_mbuf *pkts_burst[MAX_PKT_BURST * 2];
+	struct rte_mbuf *m;
+	int i = 0;
+  RTE_LOG(INFO, L2FWD, "entering main loop on lcore %u on my_func\n", lcore_id);
+  
+  while(!force_quit) {
+    unsigned ring_size = rte_ring_count(ring);
+    unsigned n = rte_ring_dequeue_bulk(ring, pkts_burst, ring_size);
+    //if(!n)
+    //  ecall_count_packets((char *)pkts_burst[0], ring_size * sizeof(struct rte_mbuf), 0);
+    for(i = 0; i < ring_size; i++) {
+      m = pkts_burst[i];
+      ecall_count_packets(rte_pktmbuf_mtod(m, char*), m->data_len, m->data_off);
+    } 
+    //if(ring_size)
+    //  RTE_LOG(INFO, L2FWD, "packet sended %d\n", pkts_burst[0]->data_len);
+  }
+  return 0;
 }
 
 /* display usage */
@@ -559,7 +611,7 @@ main(int argc, char *argv[])
 	uint8_t nb_ports;
 	uint8_t nb_ports_available;
 	uint8_t portid, last_port;
-	unsigned lcore_id, rx_lcore_id;
+	unsigned lcore_id, rx_lcore_id, master_lcore_id, last_lcore_id;
 	unsigned nb_ports_in_mask = 0;
 
     /* Initialize the enclave */
@@ -631,8 +683,14 @@ main(int argc, char *argv[])
 		l2fwd_dst_ports[last_port] = last_port;
 	}
 
-	rx_lcore_id = 0;
+	rx_lcore_id = 1;
 	qconf = NULL;
+
+  // initialize ring 
+  
+  ring = rte_ring_create(RING_NAME, RING_SIZE, SOCKET_ID_ANY, RING_F_SC_DEQ);
+  master_lcore_id = rte_get_master_lcore();
+  last_lcore_id = get_last_lcore_id();
 
 	/* Initialize the port/queue configuration of each logical core */
 	for (portid = 0; portid < nb_ports; portid++) {
@@ -746,7 +804,16 @@ main(int argc, char *argv[])
 
 	ret = 0;
 	/* launch per-lcore init on every lcore */
-	rte_eal_mp_remote_launch(l2fwd_launch_one_lcore, NULL, CALL_MASTER);
+
+  printf("%d\n", last_lcore_id);
+  for (lcore_id = 0; lcore_id < last_lcore_id; lcore_id++) {
+    if(rte_lcore_is_enabled(lcore_id) && lcore_id != master_lcore_id)
+	    rte_eal_remote_launch(l2fwd_launch_one_lcore, NULL, lcore_id);
+  }
+  //rte_eal_mp_remote_launch(l2fwd_launch_one_lcore, NULL, SKIP_MASTER);
+  //printf("%d\n", rte_lcore_is_enabled(last_lcore_id));
+  rte_eal_remote_launch(my_func, NULL, last_lcore_id);
+
 	RTE_LCORE_FOREACH_SLAVE(lcore_id) {
 		if (rte_eal_wait_lcore(lcore_id) < 0) {
 			ret = -1;
